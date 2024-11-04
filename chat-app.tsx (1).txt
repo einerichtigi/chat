@@ -1,0 +1,389 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { Search, MessageSquare, User, ArrowLeft, Camera, Send, LogOut, UserPlus, SwitchCamera, PenSquare } from 'lucide-react'
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Badge } from "@/components/ui/badge"
+
+// Simulierte Datenbank für Benutzer und Chats
+const initialUsers = [
+  { id: 1, name: 'Alice', avatar: '/placeholder.svg?height=50&width=50' },
+  { id: 2, name: 'petter', avatar: '/placeholder.svg?height=50&width=50' },
+  { id: 3, name: 'my ai, avatar: '/placeholder.svg?height=50&width=50' },
+]
+
+const initialChats = {}
+
+export default function Component() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [accounts, setAccounts] = useState([])
+  const [currentUser, setCurrentUser] = useState({ id: 0, name: '', avatar: '' })
+  const [users, setUsers] = useState(initialUsers)
+  const [chats, setChats] = useState(initialChats)
+  const [activeTab, setActiveTab] = useState('search')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [activeChatId, setActiveChatId] = useState(null)
+  const [message, setMessage] = useState('')
+  const [viewingProfile, setViewingProfile] = useState(null)
+  const [notifications, setNotifications] = useState({})
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [newName, setNewName] = useState(currentUser.name)
+
+  useEffect(() => {
+    const storedAccounts = localStorage.getItem('accounts')
+    if (storedAccounts) {
+      const parsedAccounts = JSON.parse(storedAccounts)
+      setAccounts(parsedAccounts)
+      if (parsedAccounts.length > 0) {
+        setCurrentUser({ id: 0, ...parsedAccounts[0] })
+        setIsLoggedIn(true)
+        setUsers(prevUsers => [...prevUsers, ...parsedAccounts])
+      }
+    }
+  }, [])
+
+  const handleLogin = (e) => {
+    e.preventDefault()
+    const newUser = { id: users.length, name: currentUser.name, avatar: currentUser.avatar }
+    const updatedAccounts = [...accounts, newUser]
+    localStorage.setItem('accounts', JSON.stringify(updatedAccounts))
+    setAccounts(updatedAccounts)
+    setCurrentUser(newUser)
+    setIsLoggedIn(true)
+    setUsers(prevUsers => [...prevUsers, newUser])
+  }
+
+  const handleLogout = () => {
+    setIsLoggedIn(false)
+    setCurrentUser({ id: 0, name: '', avatar: '' })
+    setActiveTab('search')
+  }
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    // In einer echten App würde hier eine Datenbankabfrage stattfinden
+    console.log('Suche nach:', searchTerm)
+  }
+
+  const handleSendMessage = (e) => {
+    e.preventDefault()
+    if (message.trim() && activeChatId !== null) {
+      const chatKey = getChatKey(currentUser.id, activeChatId)
+      const newMessage = { sender: currentUser.id, message: message.trim() }
+      setChats(prevChats => ({
+        ...prevChats,
+        [chatKey]: [...(prevChats[chatKey] || []), newMessage]
+      }))
+      setMessage('')
+      // Benachrichtigung für den Empfänger hinzufügen
+      if (activeChatId !== currentUser.id) {
+        setNotifications(prevNotifications => ({
+          ...prevNotifications,
+          [activeChatId]: {
+            ...prevNotifications[activeChatId],
+            [currentUser.id]: ((prevNotifications[activeChatId]?.[currentUser.id] || 0) + 1)
+          }
+        }))
+      }
+    }
+  }
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setCurrentUser(prev => ({ ...prev, avatar: reader.result as string }))
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const getChatKey = (userId1, userId2) => {
+    return [userId1, userId2].sort().join('-')
+  }
+
+  const startChat = (userId) => {
+    const chatKey = getChatKey(currentUser.id, userId)
+    if (!chats[chatKey]) {
+      setChats(prevChats => ({ ...prevChats, [chatKey]: [] }))
+    }
+    setActiveChatId(userId)
+    setViewingProfile(null)
+    // Benachrichtigung löschen, wenn der Chat geöffnet wird
+    setNotifications(prevNotifications => {
+      const updatedNotifications = { ...prevNotifications }
+      if (updatedNotifications[currentUser.id]) {
+        delete updatedNotifications[currentUser.id][userId]
+      }
+      return updatedNotifications
+    })
+  }
+
+  const switchAccount = (account) => {
+    setCurrentUser(account)
+    setIsLoggedIn(true)
+    setUsers(prevUsers => prevUsers.map(user => user.id === account.id ? account : user))
+  }
+
+  const handleNameChange = () => {
+    if (newName.trim()) {
+      setCurrentUser(prev => ({ ...prev, name: newName.trim() }))
+      setAccounts(prevAccounts =>
+        prevAccounts.map(account =>
+          account.id === currentUser.id ? { ...account, name: newName.trim() } : account
+        )
+      )
+      localStorage.setItem('accounts', JSON.stringify(accounts.map(account =>
+        account.id === currentUser.id ? { ...account, name: newName.trim() } : account
+      )))
+      setIsEditingName(false)
+    }
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <Card className="w-[350px] mx-auto mt-10">
+        <CardHeader>
+          <CardTitle>Anmelden</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <Input
+              placeholder="Benutzername"
+              value={currentUser.name}
+              onChange={(e) => setCurrentUser(prev => ({ ...prev, name: e.target.value }))}
+              required
+            />
+            <div className="flex items-center space-x-2">
+              <Button type="button" onClick={() => document.getElementById('avatar-upload').click()}>
+                <Camera className="h-4 w-4 mr-2" />
+                Profilbild auswählen
+              </Button>
+              <Input
+                id="avatar-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              {currentUser.avatar && (
+                <Avatar>
+                  <AvatarImage src={currentUser.avatar} alt="Profilbild" />
+                  <AvatarFallback>{currentUser.name[0]}</AvatarFallback>
+                </Avatar>
+              )}
+            </div>
+            <Button type="submit" className="w-full">Anmelden</Button>
+          </form>
+          {accounts.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-sm font-medium mb-2">Vorhandene Konten:</h3>
+              <div className="space-y-2">
+                {accounts.map((account, index) => (
+                  <Button key={index} variant="outline" className="w-full" onClick={() => switchAccount(account)}>
+                    <Avatar className="h-6 w-6 mr-2">
+                      <AvatarImage src={account.avatar} alt={account.name} />
+                      <AvatarFallback>{account.name[0]}</AvatarFallback>
+                    </Avatar>
+                    {account.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (viewingProfile) {
+    return (
+      <div className="max-w-md mx-auto h-screen flex flex-col p-4">
+        <Button variant="ghost" onClick={() => setViewingProfile(null)} className="self-start mb-4">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Zurück
+        </Button>
+        <Avatar className="w-32 h-32 mx-auto mb-4">
+          <AvatarImage src={viewingProfile.avatar} alt={viewingProfile.name} />
+          <AvatarFallback>{viewingProfile.name[0]}</AvatarFallback>
+        </Avatar>
+        <h2 className="text-2xl font-bold text-center mb-4">{viewingProfile.name}</h2>
+        <Button onClick={() => startChat(viewingProfile.id)} className="w-full">
+          Chat starten
+        </Button>
+      </div>
+    )
+  }
+
+  if (activeChatId !== null) {
+    const chatPartner = users.find(u => u.id === activeChatId)
+    const chatKey = getChatKey(currentUser.id, activeChatId)
+    return (
+      <div className="max-w-md mx-auto h-screen flex flex-col">
+        <div className="bg-gray-100 p-4 flex items-center">
+          <Button variant="ghost" onClick={() => setActiveChatId(null)} className="mr-4">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <Avatar className="mr-2">
+            <AvatarImage src={chatPartner.avatar} alt={chatPartner.name} />
+            <AvatarFallback>{chatPartner.name[0]}</AvatarFallback>
+          </Avatar>
+          <h2 className="text-lg font-semibold">{chatPartner.name}</h2>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {chats[chatKey] && chats[chatKey].map((chat, index) => (
+            <div key={index} className={`flex ${chat.sender === currentUser.id ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[70%] p-2 rounded-lg ${chat.sender === currentUser.id ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}>
+                {chat.message}
+              </div>
+            </div>
+          ))}
+        </div>
+        <form onSubmit={handleSendMessage} className="p-4 bg-gray-100 flex space-x-2">
+          <Input
+            placeholder="Nachricht eingeben"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+          />
+          <Button type="submit">
+            <Send className="h-4 w-4" />
+            <span className="sr-only">Senden</span>
+          </Button>
+        </form>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-md mx-auto h-screen flex flex-col">
+      <div className="flex-1 overflow-y-auto p-4">
+        {activeTab === 'search' && (
+          <div>
+            <form onSubmit={handleSearch} className="mb-4">
+              <div className="flex space-x-2">
+                <Input
+                  placeholder="Suche nach Benutzern"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <Button type="submit">Suchen</Button>
+              </div>
+            </form>
+            <div className="space-y-4">
+              {users.filter(user => user.name.toLowerCase().includes(searchTerm.toLowerCase()) && user.id !== currentUser.id).map(user => (
+                <div key={user.id} className="flex items-center space-x-4">
+                  <Avatar>
+                    <AvatarImage src={user.avatar} alt={user.name} />
+                    <AvatarFallback>{user.name[0]}</AvatarFallback>
+                  </Avatar>
+                  <div>{user.name}</div>
+                  <Button onClick={() => setViewingProfile(user)}>Profil ansehen</Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeTab === 'contacts' && (
+          <div className="space-y-4">
+            {users.filter(user => user.id !== currentUser.id).map(user => {
+              const chatKey = getChatKey(currentUser.id, user.id)
+              const hasMessages = chats[chatKey] && chats[chatKey].length > 0
+              const notificationCount = notifications[currentUser.id]?.[user.id] || 0
+              return (
+                <div key={user.id} className="flex items-center space-x-4">
+                  <div className="relative">
+                    <Avatar>
+                      <AvatarImage src={user.avatar} alt={user.name} />
+                      <AvatarFallback>{user.name[0]}</AvatarFallback>
+                    </Avatar>
+                    {notificationCount > 0 && (
+                      <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500 text-white rounded-full">
+                        {notificationCount}
+                      </Badge>
+                    )}
+                  </div>
+                  <div>{user.name}</div>
+                  <Button onClick={() => startChat(user.id)}>{hasMessages ? 'Chat öffnen' : 'Chat starten'}</Button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+        {activeTab === 'profile' && (
+          <div className="space-y-4">
+            <Avatar className="w-32 h-32 mx-auto">
+              <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
+              <AvatarFallback>{currentUser.name[0]}</AvatarFallback>
+            </Avatar>
+            {isEditingName ? (
+              <div className="flex items-center space-x-2">
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="text-center"
+                />
+                <Button onClick={handleNameChange}>Speichern</Button>
+                <Button variant="outline" onClick={() => setIsEditingName(false)}>Abbrechen</Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center space-x-2">
+                <h2 className="text-2xl font-bold text-center">{currentUser.name}</h2>
+                <Button variant="ghost" size="sm" onClick={() => setIsEditingName(true)}>
+                  <PenSquare className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button className="w-full">
+                  <SwitchCamera className="h-4 w-4 mr-2" />
+                  Konto wechseln
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56">
+                <div className="space-y-2">
+                  {accounts.map((account, index) => (
+                    <Button key={index} variant="ghost" className="w-full justify-start" onClick={() => switchAccount(account)}>
+                      <Avatar className="h-6 w-6 mr-2">
+                        <AvatarImage src={account.avatar} alt={account.name} />
+                        <AvatarFallback>{account.name[0]}</AvatarFallback>
+                      </Avatar>
+                      {account.name}
+                    </Button>
+                  ))}
+                  <Button variant="outline" className="w-full" onClick={handleLogout}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Neues Konto
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+            <Button onClick={handleLogout} className="w-full">
+              <LogOut className="h-4 w-4 mr-2" />
+              Abmelden
+            </Button>
+          </div>
+        )}
+      </div>
+      <div className="h-16 bg-gray-100 flex items-center justify-around">
+        <Button variant="ghost" onClick={() => setActiveTab('contacts')}>
+          <MessageSquare className="h-6 w-6" />
+          Kontakte
+        </Button>
+        <Button variant="ghost" onClick={() => setActiveTab('search')}>
+          <Search className="h-6 w-6" />
+          Suche
+        </Button>
+        <Button variant="ghost" onClick={() => setActiveTab('profile')}>
+          <User className="h-6 w-6" />
+          Profil
+        </Button>
+      </div>
+    </div>
+  )
+}
